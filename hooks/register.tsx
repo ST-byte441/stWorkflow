@@ -44,8 +44,8 @@ let ticker: Timer | undefined
 let watchTimer: Timer | undefined
 
 async function save($: EngineInterface, next: Run | null): Promise<void> {
-  isActive = next !== null
   await update($, run, () => next)
+  isActive = next !== null
   const key = storeKey(await $.session.root())
   if (next) await $.store.set(key, next)
   else await $.store.delete(key)
@@ -84,25 +84,28 @@ async function pollPr($: EngineInterface): Promise<void> {
   }
   const fresh = res.exitCode === 0 ? parseGh(res.stdout) : null
 
+  const latest = await read($, run)
+  if (!latest || latest.id !== current.id || latest.step !== current.step || !latest.pr) return
+
   if (!fresh) {
-    const failures = current.ghFailures + 1
+    const failures = latest.ghFailures + 1
     if (failures === 3) {
       const reason = (res.stderr.split('\n')[0] || 'gh returned output stWorkflow could not read').slice(0, 120)
       $.ui.toast(`stWorkflow: can't reach GitHub: ${reason}`)
       $.ui.log(`⚑ can't reach GitHub: ${reason}`)
     }
-    await save($, { ...current, ghFailures: failures })
+    await save($, { ...latest, ghFailures: failures })
     scheduleWatch($, nextDelay(failures))
     return
   }
 
-  const events = diffPr(current.pr, fresh)
+  const events = diffPr(latest.pr, fresh)
   for (const ev of events) {
     $.ui.toast(ev.text)
     $.ui.log(`⚑ ${ev.text}`)
   }
   const alert = [...events].reverse().find(ev => ev.alert)?.alert
-  let next: Run = { ...current, pr: fresh, ghFailures: 0 }
+  let next: Run = { ...latest, pr: fresh, ghFailures: 0 }
   if (alert) next.alert = alert
 
   if (fresh.state === 'merged') {
@@ -133,7 +136,7 @@ export const register: Register = on => {
     if (restored?.step === 14) scheduleWatch($, FIRST_POLL_MS)
     else stopWatch()
     return next(e)
-  })
+  }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
     const current = await read($, run)
@@ -150,7 +153,7 @@ export const register: Register = on => {
       await save($, { ...current, turnsInStep: current.turnsInStep + 1 })
     }
     return next(e)
-  })
+  }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: TOOL }, async ($, e) => {
     const now = await $.clock.now()
@@ -193,9 +196,9 @@ export const register: Register = on => {
     if (!current || e.props.hasSurvey) return next(e)
     const parts = railParts({ run: current, columns: e.props.bodyColumns, frame, isWorking: e.props.isWorking })
     return drawRail($.ui.resolve(e), parts)
-  })
+  }).catch(($, e, next) => next(e))
 
-  on('command.run', { command: 'stWorkflow-status' }, async $ => ({ text: statusText(await read($, run)) }))
+  on('command.run', { command: 'stWorkflow-status' }, async $ => ({ text: statusText(await read($, run)) })).catch(() => ({ text: 'stWorkflow hit an internal error; run claude --debug and check the debug log.' }))
 
   on('command.run', { command: 'stWorkflow-abort' }, async $ => {
     const current = await read($, run)
@@ -203,5 +206,5 @@ export const register: Register = on => {
     stopWatch()
     await save($, null)
     return { text: `Abandoned the run "${current.feature}" at step ${current.step}/15.` }
-  })
+  }).catch(() => ({ text: 'stWorkflow hit an internal error; run claude --debug and check the debug log.' }))
 }
