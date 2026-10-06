@@ -1,6 +1,6 @@
 import type { CheckState, Pr } from '../types'
 
-export const GH_FIELDS = 'number,url,state,isDraft,reviewDecision,statusCheckRollup,comments'
+export const GH_FIELDS = 'number,url,state,isDraft,reviewDecision,statusCheckRollup,comments,reviews'
 export const FIRST_POLL_MS = 5_000
 
 export function nextDelay(failures: number): number {
@@ -22,6 +22,33 @@ export function checkState(c: Record<string, unknown>): CheckState {
   return 'queued'
 }
 
+type Review = { author: string; state: string; body: string }
+
+function parseReviews(v: unknown): Review[] {
+  if (!Array.isArray(v)) return []
+  const out: Review[] = []
+  for (const r of v as unknown[]) {
+    if (typeof r !== 'object' || r === null) continue
+    const o = r as Record<string, unknown>
+    const author = typeof o.author === 'object' && o.author !== null ? (o.author as Record<string, unknown>).login : undefined
+    if (typeof author !== 'string' || !author || typeof o.state !== 'string') continue
+    out.push({ author, state: o.state, body: typeof o.body === 'string' ? o.body : '' })
+  }
+  return out
+}
+
+/** Each author's latest APPROVED / CHANGES_REQUESTED review decides; any change request wins. */
+function reviewFrom(reviews: readonly Review[]): Pr['review'] {
+  const latest = new Map<string, string>()
+  for (const r of reviews) {
+    if (r.state === 'APPROVED' || r.state === 'CHANGES_REQUESTED') latest.set(r.author, r.state)
+  }
+  const states = [...latest.values()]
+  if (states.includes('CHANGES_REQUESTED')) return 'changes'
+  if (states.includes('APPROVED')) return 'approved'
+  return 'none'
+}
+
 export function parseGh(stdout: string): Pr | null {
   let j: unknown
   try {
@@ -33,11 +60,13 @@ export function parseGh(stdout: string): Pr | null {
   const o = j as Record<string, unknown>
   if (typeof o.number !== 'number' || typeof o.url !== 'string' || typeof o.state !== 'string') return null
   const state: Pr['state'] = o.state === 'MERGED' ? 'merged' : o.state === 'CLOSED' ? 'closed' : o.isDraft ? 'draft' : 'ready'
+  const reviews = parseReviews(o.reviews)
   const review: Pr['review'] =
-    o.reviewDecision === 'APPROVED' ? 'approved' : o.reviewDecision === 'CHANGES_REQUESTED' ? 'changes' : 'none'
+    o.reviewDecision === 'APPROVED' ? 'approved' : o.reviewDecision === 'CHANGES_REQUESTED' ? 'changes' : reviewFrom(reviews)
   const rollup = Array.isArray(o.statusCheckRollup) ? (o.statusCheckRollup as unknown[]).filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null) : []
   const checks = rollup.map(c => ({ name: String(c.name ?? c.context ?? 'check'), state: checkState(c) }))
-  const comments = Array.isArray(o.comments) ? o.comments.length : 0
+  const reviewComments = reviews.filter(r => r.body.trim() !== '' || r.state === 'COMMENTED').length
+  const comments = (Array.isArray(o.comments) ? o.comments.length : 0) + reviewComments
   return { number: o.number, url: o.url, state, review, checks, comments }
 }
 

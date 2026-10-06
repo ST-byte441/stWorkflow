@@ -24,7 +24,7 @@ test('polls after entering 14, alerts on changes, finishes on merge', async ($, 
   await calls.clock.advance(5_000)
   await calls.clock.settle()
   expect(calls.gh.length).toBe(1)
-  expect(calls.gh[0]).toEqual(['gh', 'pr', 'view', '128', '--json', 'number,url,state,isDraft,reviewDecision,statusCheckRollup,comments'])
+  expect(calls.gh[0]).toEqual(['gh', 'pr', 'view', '128', '--json', 'number,url,state,isDraft,reviewDecision,statusCheckRollup,comments,reviews'])
 
   await calls.clock.advance(60_000)
   await calls.clock.settle()
