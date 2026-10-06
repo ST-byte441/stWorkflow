@@ -44,30 +44,36 @@ let isActive = false
 let ticker: Timer | undefined
 let watchTimer: Timer | undefined
 
-let writes = 0
+let persisting: Promise<void> = Promise.resolve()
+
+/** Writes the run as it stands now; queued so writes reach the store in order. */
+async function persist($: EngineInterface): Promise<void> {
+  const key = storeKey(await $.session.root())
+  const latest = await read($, run)
+  if (latest) await $.store.set(key, latest)
+  else await $.store.delete(key)
+}
 
 /**
  * Computes the new run from the current one inside `update`, so a hook that
- * awaited something in between can't write back a stale copy. Persists what
- * was applied, unless a later mutate has already applied something newer
- * (that one persists its own result).
+ * awaited something in between can't write back a stale copy. `update` may
+ * call `fn` more than once (it retries on a concurrent change), so `fn` must
+ * be pure and callers keep only what its last call captured. A real change is
+ * then persisted through a queue that always writes the latest run.
  */
 async function mutate($: EngineInterface, fn: (r: Run | null) => Run | null): Promise<Run | null> {
-  const box: { before: Run | null; after: Run | null; seq: number } = { before: null, after: null, seq: 0 }
+  const box: { before: Run | null; after: Run | null } = { before: null, after: null }
   await update($, run, current => {
     box.before = current
     box.after = fn(current)
-    box.seq = ++writes
     return box.after
   })
-  const result = box.after
-  isActive = result !== null
-  if (result === box.before) return result
-  const key = storeKey(await $.session.root())
-  if (box.seq !== writes) return result
-  if (result) await $.store.set(key, result)
-  else await $.store.delete(key)
-  return result
+  isActive = box.after !== null
+  if (box.after === box.before) return box.after
+  const write = persisting.then(() => persist($))
+  persisting = write.catch(() => undefined)
+  await write
+  return box.after
 }
 
 function startTicker($: EngineInterface): void {

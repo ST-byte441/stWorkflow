@@ -150,3 +150,15 @@ test('typing a stWorkflow command after the run ends keeps the finished run', as
   await say($, '/stWorkflow-status')
   expect(await status($)).toContain('Step 15/15 · done')
 })
+
+test('a no-op change landing mid-advance does not stop the advance being saved', async ($, on) => {
+  stubEngine(on)
+  await start($)
+  for (let ticks = 0; ticks <= 80; ticks += 5) {
+    await runCommand($, 'stWorkflow-abort')
+    await driveTo($, 3)
+    await Promise.all([adv($, { to: 4, verdict: 'pass' }), later(ticks, () => $.turn.start({ text: '', turnId: `g${ticks}` }))])
+    await start($)
+    expect(`${ticks} ${(await status($)).split('\n')[1]}`).toBe(`${ticks} Step 4/15 · plan review · 0 revision loops`)
+  }
+})
