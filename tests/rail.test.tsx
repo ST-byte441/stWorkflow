@@ -3,6 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Run } from '../types'
 import { newRun, noteHuman } from '../hooks/machine'
 import { railParts, railText } from '../hooks/rail'
+import { driveTo, start, stubEngine } from './helpers'
 
 function at(step: Run['step'], patch: Partial<Run> = {}): Run {
   return { ...newRun({ id: 'r', feature: 'x', now: 0 }), step, gateSeq: 1, humanSeq: 1, ...patch }
@@ -74,4 +75,46 @@ test('drops PR then activity when narrow', async () => {
   const narrow = railParts({ run, columns: 60, frame: 0, isWorking: false })
   expect(narrow.map(p => p.group)).not.toContain('activity')
   expect(railText(narrow).length).toBeLessThanOrEqual(60)
+})
+
+const ABOVE = (bodyColumns: number) => ({
+  component: 'AbovePrompt' as const,
+  props: { hasSurvey: false, isWorking: false, maxRows: 3, bodyColumns, scroll: { offset: 0, bodyRows: 0 }, view: {} },
+})
+
+test('the rail is drawn on terminal and desktop while a run is active', async ($, on) => {
+  stubEngine(on)
+  await start($)
+  await driveTo($, 4)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'stworkflow', surface, ...ABOVE(160) })
+    expect((await ui.find({ type: 'Text', text: /4\/15/ }))?.text).toBe('  4/15 ')
+    expect((await ui.find({ type: 'Text', text: /reply approve/ }))?.text).toBe(' ◈ reply approve or what to change')
+    await ui.unmount()
+  }
+})
+
+test('no run, no rail', async ($, on) => {
+  stubEngine(on)
+  on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine band</Text>
+  })
+  await start($)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'stworkflow', surface, ...ABOVE(160) })
+    expect(await ui.find({ type: 'Text', text: /\/15/ })).toBe(undefined)
+    expect(await ui.find({ type: 'Text', text: 'engine band' })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('the PR number is a link to the PR', async ($, on) => {
+  stubEngine(on)
+  await start($)
+  await driveTo($, 13)
+  const ui = await $.ui.mount({ plugin: 'stworkflow', surface: 'terminal', ...ABOVE(160) })
+  const link = await ui.find({ type: 'Link' })
+  expect(link?.props.href).toBe('https://github.com/acme/web/pull/128')
+  await ui.unmount()
 })
