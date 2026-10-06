@@ -103,7 +103,8 @@ function activityPart(run: Run, frame: number, isWorking: boolean): RailPart | n
   if (run.step === 15) return { key: 'act', text: ' ✔ done', group: 'activity', color: COLORS.ship }
   if (run.step === 14 && run.alert) return { key: 'act', text: ` ⚑ ${run.alert} · reply fix it`, group: 'activity', color: COLORS.alert }
   if (isWaitingOnHuman(run)) return { key: 'act', text: ` ◈ ${hintFor(run)}`, group: 'activity', color: COLORS.you }
-  if (run.turnsInStep >= 3 && STEPS[run.step].kind !== 'human') return { key: 'act', text: ' stalled?', group: 'activity', dim: true }
+  const kind = STEPS[run.step].kind
+  if (run.turnsInStep >= 3 && kind !== 'human' && kind !== 'watch') return { key: 'act', text: ' stalled?', group: 'activity', dim: true }
   if (isWorking) return { key: 'act', text: ` ${SPIN[frame % SPIN.length] ?? '⠋'}`, group: 'activity', dim: true }
   return null
 }

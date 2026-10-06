@@ -179,7 +179,8 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
-    await mutate($, r => (r && r.step !== 15 && !isWaitingOnHuman(r) ? { ...r, turnsInStep: r.turnsInStep + 1 } : r))
+    const counts = (r: Run) => r.step !== 15 && STEPS[r.step].kind !== 'watch' && !isWaitingOnHuman(r)
+    await mutate($, r => (r && counts(r) ? { ...r, turnsInStep: r.turnsInStep + 1 } : r))
     return next(e)
   }).catch(($, e, next) => next(e))
 

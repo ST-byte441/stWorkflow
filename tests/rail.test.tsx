@@ -118,3 +118,18 @@ test('the PR number is a link to the PR', async ($, on) => {
   expect(link?.props.href).toBe('https://github.com/acme/web/pull/128')
   await ui.unmount()
 })
+
+test('no stalled hint while watching the PR', async () => {
+  expect(line(at(14, { turnsInStep: 5 }))).not.toContain('stalled?')
+})
+
+test('chat turns while watching the PR never show stalled', async ($, on) => {
+  stubEngine(on)
+  await start($)
+  await driveTo($, 14)
+  for (let i = 0; i < 4; i++) await $.turn.start({ text: '', turnId: `w${i}` })
+  const ui = await $.ui.mount({ plugin: 'stworkflow', surface: 'terminal', ...ABOVE(160) })
+  expect(await ui.find({ type: 'Text', text: /14\/15/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /stalled/ })).toBe(undefined)
+  await ui.unmount()
+})
