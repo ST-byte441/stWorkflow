@@ -110,3 +110,23 @@ test('a return from PR review pushes to the same PR and advances to 13 without p
   expect(await status($)).toContain(`PR #${GOOD_PR.number} (draft) ${GOOD_PR.url}`)
   expect(await status($)).toContain('Step 13/15 · PR review')
 })
+
+const later = async (ticks: number, f: () => Promise<unknown>) => {
+  for (let i = 0; i < ticks; i++) await Promise.resolve()
+  await f()
+}
+
+test('a prompt or a turn landing mid-advance never rolls the advance back', async ($, on) => {
+  stubEngine(on)
+  await start($)
+  for (let ticks = 0; ticks <= 80; ticks += 5) {
+    await runCommand($, 'stWorkflow-abort')
+    await driveTo($, 4)
+    await say($, 'approve')
+    const [moved] = await Promise.all([adv($, { to: 5 }), later(ticks, () => say($, 'and call it Appearance'))])
+    expect(moved.deny).toBe(undefined)
+    expect((await status($)).split('\n')[1]).toBe('Step 5/15 · route · 0 revision loops')
+    await Promise.all([adv($, { to: 6 }), later(ticks, () => $.turn.start({ text: "", turnId: `t${ticks}` }))])
+    expect((await status($)).split('\n')[1]).toBe('Step 6/15 · spec · 0 revision loops')
+  }
+})

@@ -7,6 +7,7 @@ import { STEPS, advance, isWaitingOnHuman, newRun, noteHuman } from './machine'
 import { drawRail, railParts } from './rail'
 import { parseRun, storeKey } from './store'
 import { FIRST_POLL_MS, GH_FIELDS, diffPr, nextDelay, parseGh } from './watch'
+import type { PrEvent } from './watch'
 
 const TOOL = 'mcp__stworkflow__workflow_advance'
 
@@ -43,12 +44,30 @@ let isActive = false
 let ticker: Timer | undefined
 let watchTimer: Timer | undefined
 
-async function save($: EngineInterface, next: Run | null): Promise<void> {
-  await update($, run, () => next)
-  isActive = next !== null
+let writes = 0
+
+/**
+ * Computes the new run from the current one inside `update`, so a hook that
+ * awaited something in between can't write back a stale copy. Persists what
+ * was applied, unless a later mutate has already applied something newer
+ * (that one persists its own result).
+ */
+async function mutate($: EngineInterface, fn: (r: Run | null) => Run | null): Promise<Run | null> {
+  const box: { before: Run | null; after: Run | null; seq: number } = { before: null, after: null, seq: 0 }
+  await update($, run, current => {
+    box.before = current
+    box.after = fn(current)
+    box.seq = ++writes
+    return box.after
+  })
+  const result = box.after
+  isActive = result !== null
+  if (result === box.before) return result
   const key = storeKey(await $.session.root())
-  if (next) await $.store.set(key, next)
+  if (box.seq !== writes) return result
+  if (result) await $.store.set(key, result)
   else await $.store.delete(key)
+  return result
 }
 
 function startTicker($: EngineInterface): void {
@@ -71,50 +90,61 @@ function scheduleWatch($: EngineInterface, ms: number): void {
   })
 }
 
+type PollApplied = { run: Run; events: PrEvent[] }
+
 async function pollPr($: EngineInterface): Promise<void> {
   watchTimer = undefined
-  const current = await read($, run)
-  if (!current || current.step !== 14 || !current.pr) return
+  const polled = await read($, run)
+  if (!polled || polled.step !== 14 || !polled.pr) return
 
   let res: { exitCode: number; stdout: string; stderr: string }
   try {
-    res = await $.process.run(['gh', 'pr', 'view', String(current.pr.number), '--json', GH_FIELDS], { timeoutMs: 20_000 })
+    res = await $.process.run(['gh', 'pr', 'view', String(polled.pr.number), '--json', GH_FIELDS], { timeoutMs: 20_000 })
   } catch (err) {
     res = { exitCode: -1, stdout: '', stderr: String(err) }
   }
   const fresh = res.exitCode === 0 ? parseGh(res.stdout) : null
+  const now = await $.clock.now()
 
-  const latest = await read($, run)
-  if (!latest || latest.id !== current.id || latest.step !== current.step || !latest.pr) return
+  const out: { applied?: PollApplied } = {}
+  await mutate($, r => {
+    out.applied = undefined
+    if (!r || r.id !== polled.id || r.step !== 14 || !r.pr) return r
+    if (!fresh) {
+      const failed: Run = { ...r, ghFailures: r.ghFailures + 1 }
+      out.applied = { run: failed, events: [] }
+      return failed
+    }
+    const events = diffPr(r.pr, fresh)
+    const alert = [...events].reverse().find(ev => ev.alert)?.alert
+    let next: Run = { ...r, pr: fresh, ghFailures: 0 }
+    if (alert) next.alert = alert
+    if (fresh.state === 'merged') {
+      const done = advance(next, { to: 15, now })
+      if (done.ok) next = done.run
+    }
+    out.applied = { run: next, events }
+    return next
+  })
 
+  const applied = out.applied
+  if (!applied) return
   if (!fresh) {
-    const failures = latest.ghFailures + 1
+    const failures = applied.run.ghFailures
     if (failures === 3) {
       const reason = (res.stderr.split('\n')[0] || 'gh returned output stWorkflow could not read').slice(0, 120)
       $.ui.toast(`stWorkflow: can't reach GitHub: ${reason}`)
       $.ui.log(`⚑ can't reach GitHub: ${reason}`)
     }
-    await save($, { ...latest, ghFailures: failures })
     scheduleWatch($, nextDelay(failures))
     return
   }
-
-  const events = diffPr(latest.pr, fresh)
-  for (const ev of events) {
+  for (const ev of applied.events) {
     $.ui.toast(ev.text)
     $.ui.log(`⚑ ${ev.text}`)
   }
-  const alert = [...events].reverse().find(ev => ev.alert)?.alert
-  let next: Run = { ...latest, pr: fresh, ghFailures: 0 }
-  if (alert) next.alert = alert
-
-  if (fresh.state === 'merged') {
-    const done = advance(next, { to: 15, now: await $.clock.now() })
-    if (done.ok) next = done.run
-  }
-  await save($, next)
-  if (next.step === 15) $.ui.toast('stWorkflow: run complete.')
-  if (next.step === 14 && fresh.state !== 'closed') scheduleWatch($, nextDelay(0))
+  if (applied.run.step === 15) $.ui.toast('stWorkflow: run complete.')
+  if (applied.run.step === 14 && fresh.state !== 'closed') scheduleWatch($, nextDelay(0))
 }
 
 async function afterMove($: EngineInterface, next: Run): Promise<void> {
@@ -130,8 +160,11 @@ export const register: Register = on => {
     await $.command.register({ name: 'stWorkflow-status', description: 'Show the current stWorkflow run' })
     await $.command.register({ name: 'stWorkflow-abort', description: 'Abandon the current stWorkflow run' })
     const { run: restored, discarded } = parseRun(await $.store.get(storeKey(await $.session.root())))
-    if (discarded) $.ui.log('stWorkflow: discarded a saved run from an older version.')
-    await save($, restored)
+    if (discarded) {
+      $.ui.log('stWorkflow: discarded a saved run from an older version.')
+      await $.store.delete(storeKey(await $.session.root()))
+    }
+    await mutate($, () => restored)
     startTicker($)
     if (restored?.step === 14) scheduleWatch($, FIRST_POLL_MS)
     else stopWatch()
@@ -139,44 +172,53 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
-    const current = await read($, run)
-    if (current && HUMAN_ORIGINS.has(e.origin.kind)) {
-      if (current.step === 15) await save($, null)
-      else await save($, noteHuman(current))
+    if (HUMAN_ORIGINS.has(e.origin.kind)) {
+      await mutate($, r => (!r ? r : r.step === 15 ? null : noteHuman(r)))
     }
     return next(e)
   }).catch(($, e, next) => next(e))
 
   on('turn.start', async ($, e, next) => {
-    const current = await read($, run)
-    if (current && current.step !== 15 && !isWaitingOnHuman(current)) {
-      await save($, { ...current, turnsInStep: current.turnsInStep + 1 })
-    }
+    await mutate($, r => (r && r.step !== 15 && !isWaitingOnHuman(r) ? { ...r, turnsInStep: r.turnsInStep + 1 } : r))
     return next(e)
   }).catch(($, e, next) => next(e))
 
   on('tool.call', { tool: TOOL }, async ($, e) => {
     const now = await $.clock.now()
-    const current = await read($, run)
+    const id = `${now}-${Math.random().toString(36).slice(2, 8)}`
+    const out: { outcome?: { deny: string } | { run: Run; started: boolean } } = {}
 
-    if (e.to === 1) {
-      if (current && current.step !== 15) {
-        return {
-          deny: `A run is already active: "${current.feature}" at step ${current.step}/15 (${STEPS[current.step].name}). Ask the human whether to resume it (carry on from that step) or abandon it with /stWorkflow-abort.`,
+    await mutate($, current => {
+      if (e.to === 1) {
+        if (current && current.step !== 15) {
+          out.outcome = {
+            deny: `A run is already active: "${current.feature}" at step ${current.step}/15 (${STEPS[current.step].name}). Ask the human whether to resume it (carry on from that step) or abandon it with /stWorkflow-abort.`,
+          }
+          return current
         }
+        const created = newRun({ id, feature: typeof e.feature === 'string' ? e.feature : '', now })
+        out.outcome = { run: created, started: true }
+        return created
       }
-      const created = newRun({ id: `${now}-${Math.random().toString(36).slice(2, 8)}`, feature: typeof e.feature === 'string' ? e.feature : '', now })
-      await save($, created)
-      await afterMove($, created)
-      return { result: `Run started.\n\n${stepGuide(created)}` }
-    }
+      if (!current) {
+        out.outcome = { deny: 'No stWorkflow run is active. Start one with workflow_advance({ to: 1, feature }).' }
+        return current
+      }
+      const moved = advance(current, { to: e.to, verdict: e.verdict, pr: e.pr, now })
+      if (!moved.ok) {
+        out.outcome = { deny: moved.error }
+        return current
+      }
+      out.outcome = { run: moved.run, started: false }
+      return moved.run
+    })
 
-    if (!current) return { deny: 'No stWorkflow run is active. Start one with workflow_advance({ to: 1, feature }).' }
-    const moved = advance(current, { to: e.to, verdict: e.verdict, pr: e.pr, now })
-    if (!moved.ok) return { deny: moved.error }
-    await save($, moved.run)
-    await afterMove($, moved.run)
-    return { result: `Now at step ${moved.run.step}/15 (${STEPS[moved.run.step].name}).\n\n${stepGuide(moved.run)}` }
+    const outcome = out.outcome
+    if (!outcome) return { deny: 'stWorkflow hit an internal error; run claude --debug and check the debug log.' }
+    if ('deny' in outcome) return { deny: outcome.deny }
+    await afterMove($, outcome.run)
+    if (outcome.started) return { result: `Run started.\n\n${stepGuide(outcome.run)}` }
+    return { result: `Now at step ${outcome.run.step}/15 (${STEPS[outcome.run.step].name}).\n\n${stepGuide(outcome.run)}` }
   }).catch(() => ({ deny: 'stWorkflow hit an internal error; run claude --debug and check the debug log.' }))
 
   on('prompt.compose', async ($, e, next) => {
@@ -204,7 +246,7 @@ export const register: Register = on => {
     const current = await read($, run)
     if (!current) return { text: 'No stWorkflow run is active.' }
     stopWatch()
-    await save($, null)
+    await mutate($, () => null)
     return { text: `Abandoned the run "${current.feature}" at step ${current.step}/15.` }
   }).catch(() => ({ text: 'stWorkflow hit an internal error; run claude --debug and check the debug log.' }))
 }
