@@ -12,7 +12,7 @@ Tested with Claude Code 2.1.290.
 
 ## Requirements
 
-- Claude Code 2.1.287 or later (mods enabled)
+- Claude Code 2.1.290 or later (mods enabled)
 - The `superpowers` plugin (brainstorming, writing-plans, subagent-driven-development, requesting-code-review)
 - `gh`, authenticated, for the PR steps (optional; without it the run ends after code review)
 

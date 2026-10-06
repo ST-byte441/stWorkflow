@@ -14,8 +14,8 @@ export const GUIDE: Readonly<Record<StepNo, string>> = {
   10: 'Implement the spec with the superpowers:subagent-driven-development skill. When you come back here from a review or the PR, fix exactly what was reported. Then advance to 11.',
   11: 'Review the code with the superpowers:requesting-code-review skill, as an adversarial reviewer. If it finds problems, advance to 10 with verdict "block". If it is clean, advance to 12 with verdict "pass".',
   12: 'Check for a GitHub remote (git remote -v) and a working gh (gh auth status). If either is missing, tell the human and advance to 15. Otherwise push the branch, run gh pr create --draft with a human-readable title and a description that explains what changed and why, then advance to 13 with pr: { number, url }.',
-  13: 'Give the human the PR link and ask them to review it. Wait for their reply. If they approve, run gh pr ready <number> and advance to 14. If they ask for fixes, advance to 10.',
-  14: 'The stWorkflow mod is watching the PR and alerts the human about CI, reviews and comments. Do nothing unless the human asks. If they ask you to fix something, advance to 10. When the PR is merged the mod finishes the run.',
+  13: 'Give the human the PR link and ask them to review it. Wait for their reply. If they approve, run gh pr ready <number> and advance to 14. If they ask for fixes, advance to 10. If the human wants to abandon the PR, confirm with them first, then ask them to run /stWorkflow-abort (there is no move from 13 to 15).',
+  14: 'The stWorkflow mod is watching the PR and alerts the human about CI, reviews and comments. Do nothing unless the human asks. If they ask you to fix something, advance to 10. When the PR is merged the mod finishes the run. If the PR is closed without merging, ask the human whether to reopen it or end the run (advance to 15). If the human wants to stop watching, advance to 15.',
   15: 'The run is complete. Summarise the outcome if the human asks.',
 }
 

@@ -156,3 +156,17 @@ test('entering 14 asks the watcher for a fresh baseline', async () => {
   expect(watching.watchBaselined).toBe(false)
   expect(go(watching, 10).watchBaselined).toBe(undefined)
 })
+
+test('the code critic verdict must match the move', async () => {
+  let r = go(go(go(reply(toPlanReview()), 5), 6), 7)
+  r = go(reply(go(r, 8, { verdict: 'pass' })), 9)
+  r = go(go(r, 10), 11)
+  const blockedShip = advance(r, { to: 12, verdict: 'block', now: 1 })
+  expect(blockedShip.ok).toBe(false)
+  if (!blockedShip.ok) expect(blockedShip.error).toBe('From the code critic, verdict "block" goes to 10 (build) and verdict "pass" goes to 12 (draft PR).')
+  const passedBack = advance(r, { to: 10, verdict: 'pass', now: 1 })
+  expect(passedBack.ok).toBe(false)
+  if (!passedBack.ok) expect(passedBack.error).toBe('From the code critic, verdict "block" goes to 10 (build) and verdict "pass" goes to 12 (draft PR).')
+  expect(go(r, 12, { verdict: 'pass' }).step).toBe(12)
+  expect(go(r, 10, { verdict: 'block' }).step).toBe(10)
+})

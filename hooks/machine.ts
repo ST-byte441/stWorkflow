@@ -108,6 +108,9 @@ export function advance(run: Run, input: AdvanceInput): AdvanceResult {
     if (verdict !== 'pass' && verdict !== 'block') {
       return { ok: false, error: `Leaving the ${STEPS[from].name} step needs verdict: "pass" or "block".` }
     }
+    if (from === 11 && ((to === 12 && verdict === 'block') || (to === 10 && verdict === 'pass'))) {
+      return { ok: false, error: 'From the code critic, verdict "block" goes to 10 (build) and verdict "pass" goes to 12 (draft PR).' }
+    }
     const key = from === 3 ? 'plan' : from === 7 ? 'spec' : 'code'
     next.verdicts[key] = verdict
   }

@@ -60,3 +60,11 @@ test('step 12 after a return from review reuses the existing PR', async () => {
   expect(again).toContain('advance to 13')
   expect(again).not.toContain('gh pr create')
 })
+
+test('PR review and watch guides cover abandoning and closing the PR', async () => {
+  const g13 = stepGuide(base({ step: 13 }))
+  expect(g13).toContain('If the human wants to abandon the PR, confirm with them first, then ask them to run /stWorkflow-abort (there is no move from 13 to 15).')
+  const g14 = stepGuide(base({ step: 14 }))
+  expect(g14).toContain('If the PR is closed without merging, ask the human whether to reopen it or end the run (advance to 15).')
+  expect(g14).toContain('If the human wants to stop watching, advance to 15.')
+})
