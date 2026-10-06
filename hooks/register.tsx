@@ -172,7 +172,8 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
-    if (HUMAN_ORIGINS.has(e.origin.kind)) {
+    const isOwnCommand = e.text.trimStart().startsWith('/stWorkflow-')
+    if (HUMAN_ORIGINS.has(e.origin.kind) && !isOwnCommand) {
       await mutate($, r => (!r ? r : r.step === 15 ? null : noteHuman(r)))
     }
     return next(e)

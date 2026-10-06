@@ -130,3 +130,23 @@ test('a prompt or a turn landing mid-advance never rolls the advance back', asyn
     expect((await status($)).split('\n')[1]).toBe('Step 6/15 · spec · 0 revision loops')
   }
 })
+
+test('typing a stWorkflow command at a gate is not a reply', async ($, on) => {
+  stubEngine(on)
+  await start($)
+  await driveTo($, 4)
+  await say($, '/stWorkflow-status')
+  await say($, '  /stWorkflow-abort')
+  expect((await adv($, { to: 5 })).deny).toContain("hasn't replied")
+  await say($, '/stworkflow-status is lowercase, so this is a reply')
+  expect((await adv($, { to: 5 })).deny).toBe(undefined)
+})
+
+test('typing a stWorkflow command after the run ends keeps the finished run', async ($, on) => {
+  stubEngine(on)
+  await start($)
+  await driveTo($, 12)
+  await adv($, { to: 15 })
+  await say($, '/stWorkflow-status')
+  expect(await status($)).toContain('Step 15/15 · done')
+})
