@@ -16,13 +16,26 @@ Tested with Claude Code 2.1.290.
 - The `superpowers` plugin (brainstorming, writing-plans, subagent-driven-development, requesting-code-review)
 - `gh`, authenticated, for the PR steps (optional; without it the run ends after code review)
 
-## Use
+## Install
+
+In a Claude Code session, run these once:
+
+```
+/plugin marketplace add ST-byte441/stWorkflow
+/plugin install stworkflow@stworkflow
+```
+
+Choose the user scope to have it in every project. To update later, run `/plugin marketplace update stworkflow`.
+
+To try a local checkout for one session instead, run:
 
 ```bash
 claude --plugin-dir ~/projects/stworkflow
 ```
 
-Then, in the session:
+## Use
+
+In the session:
 
 - `/stWorkflow add a dark mode toggle to Settings` starts a run.
 - Reply in chat at each gate: approve, or say what to change.

@@ -2,5 +2,8 @@
   "name": "stworkflow",
   "version": "0.1.0",
   "description": "Runs a feature from idea to merged PR through a 15-step workflow, shown as a one-line rail above the prompt",
+  "author": {
+    "name": "ST-byte441"
+  },
   "types": "./types/index.d.ts"
 }

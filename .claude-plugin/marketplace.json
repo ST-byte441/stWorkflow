@@ -1,0 +1,14 @@
+{
+  "name": "stworkflow",
+  "owner": {
+    "name": "ST-byte441"
+  },
+  "description": "stWorkflow: a 15-step plan → spec → build → ship workflow for Claude Code",
+  "plugins": [
+    {
+      "name": "stworkflow",
+      "source": "./",
+      "description": "Runs a feature from idea to merged PR through a 15-step workflow, shown as a one-line rail above the prompt"
+    }
+  ]
+}
