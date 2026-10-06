@@ -74,7 +74,8 @@ export type PrEvent = { text: string; alert?: string }
 
 const allPass = (p: Pr) => p.checks.length > 0 && p.checks.every(c => c.state === 'pass')
 
-export function diffPr(prev: Pr, next: Pr): PrEvent[] {
+/** With `baseline`, comments and reviews only set the starting point: no events for them. */
+export function diffPr(prev: Pr, next: Pr, opts: { baseline?: boolean } = {}): PrEvent[] {
   const name = `PR #${next.number}`
   const events: PrEvent[] = []
   for (const c of next.checks) {
@@ -82,11 +83,11 @@ export function diffPr(prev: Pr, next: Pr): PrEvent[] {
     if (c.state === 'fail' && before?.state !== 'fail') events.push({ text: `${name}: CI failed on ${c.name}`, alert: `${c.name} failed` })
   }
   if (allPass(next) && !allPass(prev)) events.push({ text: `${name}: all checks passed` })
-  if (next.review !== prev.review) {
+  if (!opts.baseline && next.review !== prev.review) {
     if (next.review === 'approved') events.push({ text: `${name} was approved` })
     if (next.review === 'changes') events.push({ text: `${name}: changes requested`, alert: 'changes requested' })
   }
-  if (next.comments > prev.comments) {
+  if (!opts.baseline && next.comments > prev.comments) {
     const k = next.comments - prev.comments
     events.push({ text: `${name}: ${k} new comment${k === 1 ? '' : 's'}`, alert: 'new comment' })
   }

@@ -127,7 +127,11 @@ export function advance(run: Run, input: AdvanceInput): AdvanceResult {
   if ((from === 13 || from === 14) && to === 10) next.shipLoops += 1
   if (from === 12 && to === 15) next.skipped = [13, 14]
   if (from === 13 && to === 14 && next.pr) next.pr = { ...next.pr, state: 'ready' }
-  if (from === 14) delete next.alert
+  if (from === 14) {
+    delete next.alert
+    delete next.watchBaselined
+  }
+  if (to === 14) next.watchBaselined = false
 
   next.step = to
   next.turnsInStep = 0

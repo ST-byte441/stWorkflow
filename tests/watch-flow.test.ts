@@ -103,3 +103,46 @@ test('an abort during an in-flight poll is not undone', async ($, on) => {
   expect(calls.toasts.filter(t => t.includes('⚑ PR') || t.includes('PR #'))).toEqual([])
   expect(calls.logs.filter(l => l.startsWith('⚑ PR'))).toEqual([])
 })
+
+test('the first poll after entering 14 sets the baseline without comment or review alerts', async ($, on) => {
+  const three = [{ body: 'a' }, { body: 'b' }, { body: 'c' }]
+  const replies = [
+    gh({ comments: three, reviewDecision: 'APPROVED' }),
+    gh({ comments: [...three, { body: 'd' }], reviewDecision: 'APPROVED' }),
+  ]
+  const calls = stubEngine(on, () => replies.shift() ?? gh({ comments: [...three, { body: 'd' }], reviewDecision: 'APPROVED' }))
+  await start($)
+  await driveTo($, 14)
+  await calls.clock.advance(5_000)
+  await calls.clock.settle()
+  expect(calls.gh.length).toBe(1)
+  expect(calls.toasts.filter(t => t.startsWith('PR #'))).toEqual([])
+  expect(await status($)).not.toContain('Alert:')
+
+  await calls.clock.advance(60_000)
+  await calls.clock.settle()
+  expect(calls.toasts.filter(t => t.startsWith('PR #'))).toEqual(['PR #128: 1 new comment'])
+})
+
+test('the baseline poll still reports failing checks', async ($, on) => {
+  const calls = stubEngine(on, () => gh({ comments: [{ body: 'a' }], statusCheckRollup: [{ name: 'e2e', status: 'COMPLETED', conclusion: 'FAILURE' }] }))
+  await start($)
+  await driveTo($, 14)
+  await calls.clock.advance(5_000)
+  await calls.clock.settle()
+  expect(calls.toasts.filter(t => t.startsWith('PR #'))).toEqual(['PR #128: CI failed on e2e'])
+})
+
+test('a reload into 14 sets a new baseline', async ($, on) => {
+  const replies = [gh({}), gh({ comments: [{ body: 'a' }, { body: 'b' }] })]
+  const calls = stubEngine(on, () => replies.shift() ?? gh({ comments: [{ body: 'a' }, { body: 'b' }] }))
+  await start($)
+  await driveTo($, 14)
+  await calls.clock.advance(5_000)
+  await calls.clock.settle()
+  await start($)
+  await calls.clock.advance(5_000)
+  await calls.clock.settle()
+  expect(calls.gh.length).toBe(2)
+  expect(calls.toasts.filter(t => t.startsWith('PR #'))).toEqual([])
+})

@@ -115,9 +115,9 @@ async function pollPr($: EngineInterface): Promise<void> {
       out.applied = { run: failed, events: [] }
       return failed
     }
-    const events = diffPr(r.pr, fresh)
+    const events = diffPr(r.pr, fresh, { baseline: r.watchBaselined === false })
     const alert = [...events].reverse().find(ev => ev.alert)?.alert
-    let next: Run = { ...r, pr: fresh, ghFailures: 0 }
+    let next: Run = { ...r, pr: fresh, ghFailures: 0, watchBaselined: true }
     if (alert) next.alert = alert
     if (fresh.state === 'merged') {
       const done = advance(next, { to: 15, now })
@@ -164,7 +164,7 @@ export const register: Register = on => {
       $.ui.log('stWorkflow: discarded a saved run from an older version.')
       await $.store.delete(storeKey(await $.session.root()))
     }
-    await mutate($, () => restored)
+    await mutate($, () => (restored?.step === 14 ? { ...restored, watchBaselined: false } : restored))
     startTicker($)
     if (restored?.step === 14) scheduleWatch($, FIRST_POLL_MS)
     else stopWatch()

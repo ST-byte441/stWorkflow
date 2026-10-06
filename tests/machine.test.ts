@@ -149,3 +149,10 @@ test('the 12 → 13 loop keeps the existing PR', async () => {
   expect(other.pr).toEqual({ number: 131, url: 'https://github.com/acme/web/pull/131', state: 'draft', checks: [], review: 'none', comments: 0 })
   expect(advance(r, { to: 13, pr: { number: 7 }, now: 1 }).ok).toBe(false)
 })
+
+test('entering 14 asks the watcher for a fresh baseline', async () => {
+  const opened = toPrReview()
+  const watching = go(reply(opened), 14)
+  expect(watching.watchBaselined).toBe(false)
+  expect(go(watching, 10).watchBaselined).toBe(undefined)
+})

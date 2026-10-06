@@ -84,3 +84,10 @@ test('malformed reviews are ignored', async () => {
   expect(pr?.comments).toBe(0)
   expect(parseGh(ghJson({ reviews: 'nope' }))?.review).toBe('none')
 })
+
+test('a baseline diff skips comment and review events but keeps checks and state', async () => {
+  const before = pr({ checks: [{ name: 'e2e', state: 'running' }] })
+  const after = pr({ checks: [{ name: 'e2e', state: 'fail' }], comments: 3, review: 'approved' })
+  expect(diffPr(before, after, { baseline: true })).toEqual([{ text: 'PR #128: CI failed on e2e', alert: 'e2e failed' }])
+  expect(diffPr(before, pr({ checks: before.checks, review: 'changes', state: 'closed' }), { baseline: true })).toEqual([{ text: 'PR #128 was closed without merging', alert: 'PR closed' }])
+})

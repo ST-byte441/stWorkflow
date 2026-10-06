@@ -27,6 +27,8 @@ export type Run = {
   pr?: Pr
   alert?: string
   ghFailures: number
+  /** False from entering step 14 (or reloading into it) until the first successful poll sets the comment/review baseline. */
+  watchBaselined?: boolean
   history: { at: number; step: StepNo; text: string }[]
 }
 
