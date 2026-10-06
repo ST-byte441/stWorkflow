@@ -35,7 +35,7 @@ export function parseGh(stdout: string): Pr | null {
   const state: Pr['state'] = o.state === 'MERGED' ? 'merged' : o.state === 'CLOSED' ? 'closed' : o.isDraft ? 'draft' : 'ready'
   const review: Pr['review'] =
     o.reviewDecision === 'APPROVED' ? 'approved' : o.reviewDecision === 'CHANGES_REQUESTED' ? 'changes' : 'none'
-  const rollup = Array.isArray(o.statusCheckRollup) ? (o.statusCheckRollup as Record<string, unknown>[]) : []
+  const rollup = Array.isArray(o.statusCheckRollup) ? (o.statusCheckRollup as unknown[]).filter((c): c is Record<string, unknown> => typeof c === 'object' && c !== null) : []
   const checks = rollup.map(c => ({ name: String(c.name ?? c.context ?? 'check'), state: checkState(c) }))
   const comments = Array.isArray(o.comments) ? o.comments.length : 0
   return { number: o.number, url: o.url, state, review, checks, comments }

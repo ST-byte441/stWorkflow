@@ -51,3 +51,8 @@ test('diffPr reports each change once', async () => {
   expect(diffPr(before, pr({ checks: before.checks, state: 'merged' }))).toEqual([{ text: 'PR #128 was merged' }])
   expect(diffPr(before, pr({ checks: before.checks, state: 'closed' }))).toEqual([{ text: 'PR #128 was closed without merging', alert: 'PR closed' }])
 })
+
+test('parseGh ignores malformed check entries', async () => {
+  const out = JSON.stringify({ number: 128, url: 'https://x/1', state: 'OPEN', isDraft: false, reviewDecision: null, comments: [], statusCheckRollup: [null, 3, { name: 'lint', status: 'COMPLETED', conclusion: 'SUCCESS' }] })
+  expect(parseGh(out)?.checks).toEqual([{ name: 'lint', state: 'pass' }])
+})
