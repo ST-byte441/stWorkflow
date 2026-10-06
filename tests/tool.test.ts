@@ -95,3 +95,18 @@ test('PR gate: fixes go back to build and count as a ship loop', async ($, on) =
   expect(await status($)).toContain('Step 10/15 · build · 1 revision loop')
   expect(await status($)).toContain(`PR #${GOOD_PR.number} (draft)`)
 })
+
+test('a return from PR review pushes to the same PR and advances to 13 without pr', async ($, on) => {
+  stubEngine(on)
+  await start($)
+  await driveTo($, 13)
+  await say($, 'rename the setting to Appearance')
+  await adv($, { to: 10 })
+  await adv($, { to: 11 })
+  const at12 = await adv($, { to: 12, verdict: 'pass' })
+  expect(String(at12.result)).toContain('push the new commits to the existing PR #128')
+  const at13 = await adv($, { to: 13 })
+  expect(at13.deny).toBe(undefined)
+  expect(await status($)).toContain(`PR #${GOOD_PR.number} (draft) ${GOOD_PR.url}`)
+  expect(await status($)).toContain('Step 13/15 · PR review')
+})

@@ -14,7 +14,7 @@ const ADVANCE_DESCRIPTION = [
   'Report a step change in the stWorkflow run.',
   'Start a run with to: 1 and feature (a one-line summary of what the human asked for).',
   'Leaving a critic step (3, 7, 11) needs verdict "pass" or "block".',
-  'Moving from 12 to 13 needs pr: { number, url } for the draft PR.',
+  'Moving from 12 to 13 needs pr: { number, url } for the draft PR; when the run already has a PR (a return from review), omit pr to keep it.',
   'The tool refuses illegal moves, and refuses to leave a human-review step (1, 4, 8, 13) before the human has replied.',
 ].join(' ')
 
@@ -28,7 +28,7 @@ const ADVANCE_SCHEMA = {
       type: 'object',
       properties: { number: { type: 'integer' }, url: { type: 'string' } },
       required: ['number', 'url'],
-      description: 'The draft PR, when moving from 12 to 13',
+      description: 'The draft PR, when moving from 12 to 13 for the first time',
     },
   },
   required: ['to'],

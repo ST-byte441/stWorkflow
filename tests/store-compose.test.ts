@@ -50,3 +50,13 @@ test('status text', async () => {
   expect(t).toContain('Alert: e2e failed')
   expect(t).toContain('  +12m  2  input → plan')
 })
+
+test('step 12 after a return from review reuses the existing PR', async () => {
+  const first = stepGuide(base({ step: 12 }))
+  expect(first).toContain('gh pr create --draft')
+  const pr = { number: 128, url: 'https://github.com/acme/web/pull/128', state: 'ready' as const, checks: [], review: 'none' as const, comments: 0 }
+  const again = stepGuide(base({ step: 12, pr }))
+  expect(again).toContain('push the new commits to the existing PR #128')
+  expect(again).toContain('advance to 13')
+  expect(again).not.toContain('gh pr create')
+})

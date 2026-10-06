@@ -128,3 +128,24 @@ test('history records each move', async () => {
   expect(r.history.map(h => h.step)).toEqual([1, 2, 3])
   expect(r.history[2]?.text).toBe('plan → plan critic')
 })
+
+function toPrReview(): Run {
+  let r = go(go(go(reply(toPlanReview()), 5), 6), 7)
+  r = go(reply(go(r, 8, { verdict: 'pass' })), 9)
+  r = go(go(go(r, 10), 11), 12, { verdict: 'pass' })
+  return go(r, 13, { pr: { number: 128, url: 'https://github.com/acme/web/pull/128' } })
+}
+
+test('the 12 → 13 loop keeps the existing PR', async () => {
+  const opened = toPrReview()
+  const seen: Run = { ...opened, pr: { ...opened.pr!, state: 'ready', checks: [{ name: 'e2e', state: 'fail' }], comments: 3, review: 'changes' } }
+  let r = go(reply(seen), 10)
+  r = go(go(r, 11), 12, { verdict: 'pass' })
+  const again = go(r, 13)
+  expect(again.pr).toEqual(seen.pr)
+  const same = go(r, 13, { pr: { number: 128, url: 'https://github.com/acme/web/pull/128' } })
+  expect(same.pr).toEqual(seen.pr)
+  const other = go(r, 13, { pr: { number: 131, url: 'https://github.com/acme/web/pull/131' } })
+  expect(other.pr).toEqual({ number: 131, url: 'https://github.com/acme/web/pull/131', state: 'draft', checks: [], review: 'none', comments: 0 })
+  expect(advance(r, { to: 13, pr: { number: 7 }, now: 1 }).ok).toBe(false)
+})

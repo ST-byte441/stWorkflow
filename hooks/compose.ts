@@ -19,11 +19,18 @@ export const GUIDE: Readonly<Record<StepNo, string>> = {
   15: 'The run is complete. Summarise the outcome if the human asks.',
 }
 
+function guideFor(run: Run): string {
+  if (run.step === 12 && run.pr) {
+    return `A PR already exists (#${run.pr.number}, ${run.pr.url}). Commit the fixes and push the new commits to the existing PR #${run.pr.number}; do not create a new PR. Then advance to 13 (pr may be omitted).`
+  }
+  return GUIDE[run.step]
+}
+
 export function stepGuide(run: Run): string {
   const legal = EDGES[run.step].map(n => `${n} (${STEPS[n].name})`).join(', ')
   const lines = [
     `stWorkflow run: "${run.feature}". Current step ${run.step}/15: ${STEPS[run.step].name}.`,
-    GUIDE[run.step],
+    guideFor(run),
   ]
   if (isWaitingOnHuman(run)) lines.push("This is the human's turn: do not call workflow_advance until they have replied.")
   if (legal) lines.push(`Legal next steps: ${legal}. Report every step change with the workflow_advance tool.`)

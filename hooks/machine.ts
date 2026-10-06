@@ -113,9 +113,12 @@ export function advance(run: Run, input: AdvanceInput): AdvanceResult {
   }
 
   if (from === 12 && to === 13) {
-    const pr = parsePrRef(input.pr)
-    if (!pr) return { ok: false, error: 'Moving to step 13 needs pr: { number, url } for the draft PR you opened.' }
-    next.pr = { number: pr.number, url: pr.url, state: 'draft', checks: [], review: 'none', comments: 0 }
+    const pr = input.pr === undefined && run.pr ? null : parsePrRef(input.pr)
+    if (!pr && !run.pr) return { ok: false, error: 'Moving to step 13 needs pr: { number, url } for the draft PR you opened.' }
+    if (!pr && input.pr !== undefined) return { ok: false, error: 'pr must be { number, url } for the PR; omit it to keep the existing PR.' }
+    if (pr && pr.number !== run.pr?.number) {
+      next.pr = { number: pr.number, url: pr.url, state: 'draft', checks: [], review: 'none', comments: 0 }
+    }
   }
 
   if (from === 5 && to === 2) next.iter.plan += 1

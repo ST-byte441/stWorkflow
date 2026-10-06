@@ -43,7 +43,7 @@ don't retry the same move until that's done.
 | 9 | Route | Changes or unresolved block → correct the spec, then `to: 7`. Approved → `to: 10`. | |
 | 10 | Build | Use the `superpowers:subagent-driven-development` skill. On a return, fix exactly what was reported. | `to: 11` |
 | 11 | Code critic | Use the `superpowers:requesting-code-review` skill as an adversarial review. | problems → `to: 10, verdict: "block"`; clean → `to: 12, verdict: "pass"` |
-| 12 | Draft PR | Check `git remote -v` and `gh auth status`. Missing either → tell the user, `to: 15`. Otherwise push and `gh pr create --draft` with a human-readable title and a description of what changed and why. | `to: 13, pr: { number, url }` |
+| 12 | Draft PR | Check `git remote -v` and `gh auth status`. Missing either → tell the user, `to: 15`. Otherwise push and `gh pr create --draft` with a human-readable title and a description of what changed and why. On a return from review/PR (a PR already exists): push the new commits to that PR and advance to 13; don't create a new one. | `to: 13, pr: { number, url }` |
 | 13 | PR review | Give the user the PR link; ask them to review. Wait. Approved → `gh pr ready <number>`, `to: 14`. Fixes → `to: 10`. | |
 | 14 | Watch | The mod polls the PR and alerts the user. Do nothing unless asked. Asked to fix something → `to: 10`. The mod finishes the run on merge. | |
 | 15 | End | Summarise if asked. | |
